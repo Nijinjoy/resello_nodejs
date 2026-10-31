@@ -12,9 +12,10 @@ if (!accountSid || !authToken) {
 
 export const twilioClient = twilio(accountSid, authToken);
 
-export const verifyServiceSid =
-  process.env.TWILIO_VERIFY_SERVICE_SID;
+const serviceSid = process.env.TWILIO_VERIFY_SERVICE_SID;
 
-if (!verifyServiceSid) {
+if (!serviceSid) {
   throw new Error("Twilio Verify Service SID is missing");
 }
+
+export const verifyServiceSid: string = serviceSid;

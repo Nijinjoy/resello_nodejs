@@ -1,5 +1,14 @@
 import { Request, Response } from "express";
-import { sendOtp, verifyOtp } from "../services/auth.service";
+import {
+  completeProfile,
+  findOrCreateVerifiedUser,
+  ProfileConflictError,
+  sendOtp,
+  toPublicUser,
+  verifyOtp,
+} from "../services/auth.service";
+import { signToken } from "../utils/jwt";
+import { completeProfileSchema } from "../validators/auth.validator";
 
 const isValidPhoneNumber = (phone: string) => {
   return /^\+[1-9]\d{7,14}$/.test(phone);
@@ -81,12 +90,17 @@ export const verifyOtpController = async (
       });
     }
 
+    const user = await findOrCreateVerifiedUser(phoneNumber);
+
     return res.status(200).json({
       success: true,
       message: "Phone number verified successfully",
       data: {
         phoneNumber,
         verified: true,
+        token: signToken(user.id),
+        isProfileComplete: user.is_profile_complete,
+        user: toPublicUser(user),
       },
     });
   } catch (error: any) {
@@ -95,6 +109,51 @@ export const verifyOtpController = async (
     return res.status(400).json({
       success: false,
       message: "OTP verification failed",
+    });
+  }
+};
+
+export const completeProfileController = async (
+  req: Request,
+  res: Response
+) => {
+  const parsed = completeProfileSchema.safeParse(req.body ?? {});
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      success: false,
+      message: parsed.error.issues[0].message,
+    });
+  }
+
+  try {
+    const user = await completeProfile(
+      req.user!.id,
+      parsed.data,
+      req.file && {
+        buffer: req.file.buffer,
+        extension: res.locals.profilePictureExtension,
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Registration completed successfully",
+      data: { user: toPublicUser(user) },
+    });
+  } catch (error: any) {
+    if (error instanceof ProfileConflictError) {
+      return res.status(409).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    console.error("Complete profile error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to complete registration",
     });
   }
 };
